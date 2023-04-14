@@ -121,6 +121,8 @@ for t in T:-1:1
         res = maximize_stage(Ṽ, aⁱ, income, stage_c_min, stage_c_max)
         policy[t, i] = maximizer(res)
         V[t, i] = maximum(res)
+
+        @assert(maximum(res) != -Inf, "Negative infinity V[t,i] in grid point $i in stage $t")
     end
     
     #println("i_min in $t is $i_min corresponding to $(grid[i_min]), with value function $(V[t, i_min]) and policy $(policy[t, i_min])")
