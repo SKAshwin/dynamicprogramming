@@ -16,9 +16,8 @@ for t in 1:T
         # specifically, past the grid point that defines the minimum
         # recommended consumption policy results in going beyond minimum savings
         # default to minimum consumption in this case
-        print(t)
-        println("this triggered")
-        error("Negative final assets")
+        println("In period $t you were risking negative final savings, with savings $(savings[t+1]) at the start of period $(t+1)")
+        #error("Negative final assets")
     end
 end
 
