@@ -7,14 +7,16 @@ using Optim: maximizer
 # Parameters
 T = 50                   # Number of periods
 r = 0.05                 # Interest rate
-n_grid = 3000             # Number of grid points for the state (savings) space
+n_grid = 500             # Number of grid points for the state (savings) space
 income = 0.5              # Deterministic income per period
-β = 0.96                # Discount factor
-min_consumption = 0.05     # Minimum consumption
+β = 0.95                # Discount factor
+min_consumption = 0.2     # Minimum consumption
 
-# For testing
-#V[T+1, :] = map(x->-0.04(x+25)^2 + 2(x+25), grid)
+# Minimum consumption must be set to more than the distance between adjacent grid points in savings space
+# An assertion further below checks this - minimum consumption affects the max savings that can be in playing
+# And so affects the total range represented by the grid, and so affects the grid space
 
+# Makes the interpolated value function, given the gridded value function
 function make_Ṽ(V, grid, t)
     interpolate((grid,),V[t, :], Gridded(Linear()))
 end
@@ -64,14 +66,21 @@ function consumption_boundary(aₜ, y, t, T, c_min, r)
     return (c_min, max_consumption)
 end
 
+# Given the current period, total game length, income, minimum consumption and
+# return on assets, calculates, for this period, the maximum savings
+# and minimum savings allowed
+function state_boundary(t, T, y, c_min, r)
+    a_max = max_current_savings(t, y, c_min, r)
+    a_min = min_consumption-income-max_future_discounted_savings(t, T, y, c_min, r)
+    return (a_min, a_max)
+end
+
 # Utility function
 u(c) = log(c)
-
 # Transition function for savings a given spending c
 transition(a, c, y) = (1 + r) * (a + y - c)
-# Given how many assets you have next period and how much income this period
-# what was your consumption
-invtransition(aₜ₊₁, aₜ, yₜ) = aₜ - yₜ - aₜ₊₁/(1+r)  
+
+
 # Value iteration
 V = zeros(T + 1, n_grid) # creates a (Tx1)x(n_grid) 0-matrix
 # V[t, i] stores the value function for playing action i in period t - ie Vₜ(aⁱ)
@@ -83,71 +92,37 @@ println(max_aₜ)
 println(min_aₜ)
 grid = collect(range(min_aₜ-1, stop=max_aₜ+1, length=n_grid))   # Grid in assets
 
+println("Minimum consumption is $min_consumption and distance between gridpoints is $((max_aₜ-min_aₜ)/n_grid)")
+@assert((max_aₜ-min_aₜ)/n_grid <= min_consumption)
+
 # Loop through each period backwards
 for t in T:-1:1
     # Create the interpolated function for the next period
     Ṽ = make_Ṽ(V, grid, t+1)
-    i_min = 0
-    i_max = n_grid + 1
-    # Loop through each grid point for assets
-    for i in 1:n_grid
-        aⁱ= grid[i]
-        # Some grid points can never feasibly be reached, so we can safely ignore them
-        # if the grid point is more than you could ever save
-        # by this point, don't bother computing the value functions
-        # Add some tolerance
-        if aⁱ > max_current_savings(t, income, min_consumption, r)
-            policy[t, i] = min_consumption
-            V[t, i] = -Inf
-            # if this is the first time this clause is triggered, assign i_max
-            if i_max == n_grid + 1 
-                i_max =  i
-            end 
-            continue
-        elseif aⁱ < min_consumption-income-max_future_discounted_savings(t, T, income, min_consumption, r)
-            # similarly, if this grid point corresponds to having so little savings
-            # you can't consume the minimum level going forward, ignore it 
-            policy[t, i] = min_consumption
-            V[t, i] = -Inf 
-            i_min = i
-            continue
-        end
 
-        # We now need to calculate what consumption would maximize the DP maximand, given that aₜ = aⁱ
-        # ie the choice-specific payoff, conditional on optimal payoff function in the next period
-        #f = maximand(Ṽ, aⁱ, income)
-        # We need to know what the maximum/min consumption allowed is
-        #max_consumption = aⁱ + income + max_future_discounted_savings(t,T, income, min_consumption, r)
-        #max_consumption = min_consumption > max_consumption ? min_consumption : max_consumption
-        #res = maximize(f, min_consumption, max_consumption)
+    # Calculate feasible portion of the grid in this period
+    (a_min, a_max) = state_boundary(t, T, income, min_consumption, r)
+    i_max = findfirst(aⁱ -> aⁱ > a_max, grid)
+    i_min = findlast(aⁱ -> aⁱ < a_min, grid)
+    V[t, :] = fill!(V[t, :], -Inf)
+    policy[t,:] = fill!(policy[t,:], min_consumption) 
+    # Loop through each grid point for assets
+    # Parallelize this section
+    Threads.@threads for i in i_min:i_max
+        aⁱ= grid[i]
+        # Get the max and minimum spending in the current period
+        # then maximize the stage game within these constraints
         (stage_c_min, stage_c_max) = consumption_boundary(aⁱ, income, t, T, min_consumption, r)
+        # if you're at i_min, which is barely outside of the boundary, relax the lower bound on consumption
+        # to allow consumption that stays within the feasible asset space (min_consumption might be too high)
+        stage_c_min = i == i_min ? 0 : stage_c_min
+        
+        # Given constraints, maximize stage game
         res = maximize_stage(Ṽ, aⁱ, income, stage_c_min, stage_c_max)
         policy[t, i] = maximizer(res)
         V[t, i] = maximum(res)
     end
-    # For the boundaries of the feasible region, the grid points just outside it are used
-    # for Interpolations in the next iteration
-    # if they are -Inf, you will progressively lose gridpoints at the edge of every iteration
-    if i_min > 0
-        println("i_min")
-        println(t)
-        println(i_min)
-        f = maximand(Ṽ, grid[i_min], income)
-        max_consumption = grid[i_min] + income + max_future_discounted_savings(t,T, income, min_consumption, r)
-        max_consumption = min_consumption > max_consumption ? min_consumption : max_consumption
-        res = maximize(f, 0, max_consumption)
-        #res = maximize_stage(Ṽ, grid[i_min], income, t, T, 0, r)
-        policy[t, i_min] = maximizer(res)
-        V[t, i_min] = maximum(res)
-        println(maximizer(res))
-        println(maximum(res))
-    end
-    if i_max < n_grid +1
-        println("i_max")
-        println(t)
-        println(i_max)
-        V[t, i_max] = V[t, i_max - 1]
-        policy[t,i_max] = policy[t, i_max - 1]
-    end
+    
+    #println("i_min in $t is $i_min corresponding to $(grid[i_min]), with value function $(V[t, i_min]) and policy $(policy[t, i_min])")
+    #println("i_max in $t is $i_max corresponding to $(grid[i_max]), with value function $(V[t, i_max]) and policy $(policy[t, i_max])")
 end
-
