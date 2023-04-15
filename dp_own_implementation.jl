@@ -9,7 +9,7 @@ T = 50                   # Number of periods
 r = 0.05                 # Interest rate
 n_grid = 500             # Number of grid points for the state (savings) space
 income = 0.5              # Deterministic income per period
-β = 0.95                # Discount factor
+β = 0.96                # Discount factor
 min_consumption = 0.2     # Minimum consumption
 
 # Minimum consumption must be set to more than the distance between adjacent grid points in savings space
@@ -86,7 +86,7 @@ V = zeros(T + 1, n_grid) # creates a (Tx1)x(n_grid) 0-matrix
 # V[t, i] stores the value function for playing action i in period t - ie Vₜ(aⁱ)
 policy = zeros(T, n_grid)
 # policy[t, i] stores the optimal consumption in period t, if you have aₜ=aⁱ assets at the start of period t
-max_aₜ = max_current_savings(T, income, min_consumption, r) + 0.1
+max_aₜ = max_current_savings(T, income, min_consumption, r)
 min_aₜ = min_consumption-income-max_future_discounted_savings(1, T, income, min_consumption, r)
 println(max_aₜ)
 println(min_aₜ)
@@ -122,6 +122,7 @@ for t in T:-1:1
         policy[t, i] = maximizer(res)
         V[t, i] = maximum(res)
 
+        # There should be no -Inf payoffs within the portion of the grid that lies within the domain of V_t
         @assert(maximum(res) != -Inf, "Negative infinity V[t,i] in grid point $i in stage $t")
     end
     
