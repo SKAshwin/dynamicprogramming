@@ -4,7 +4,7 @@ using Plots, StatsBase
 savings = zeros(T + 1)
 incomes = zeros(T) # Random savings draws
 savings[1] = 0  # Initial savings
-incomes[1] = y_grid[1] # initial income
+incomes[1] = y_grid[floor(Int, income_n_points/2)] # initial income
 consumptions = zeros(T)
 
 for t in 1:T
