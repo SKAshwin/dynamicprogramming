@@ -10,7 +10,7 @@ using Optim: maximizer
 global const T = 50                   # Number of periods
 global const r = 0.05                 # Interest rate
 global const n_grid = 500             # Number of grid points for the state (savings) space
-global const β = 0.96                 # Discount factor
+global const β = 1/(1+r)           # Discount factor
 global const min_consumption = 0.35    # Minimum consumption
 # Minimum consumption must be set to more than the distance between adjacent grid points in savings space
 # An assertion further below checks this - minimum consumption affects the max savings that can be in playing
@@ -152,8 +152,8 @@ for t in T:-1:1
     i_min = findlast(aⁱ -> aⁱ < a_min, grid)
     EV[t, :, : ] = fill!(EV[t, :, :], -Inf)
     policy[t,:, :] = fill!(policy[t,:,:], min_consumption) 
-    println("i_min in $t is $i_min corresponding to $(grid[i_min])")
-    println("i_max in $t is $i_max corresponding to $(grid[i_max])")
+    #println("i_min in $t is $i_min corresponding to $(grid[i_min])")
+    #println("i_max in $t is $i_max corresponding to $(grid[i_max])")
     # Loop through each grid point for assets
     # Parallelize this section
     # Threads.@threads 
