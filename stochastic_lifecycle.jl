@@ -38,7 +38,7 @@ function conditional_pmf(yₜ, yₜ₋₁)
     # conditional_y_dist = 0.5*income_μ + Truncated(Normal(0.5*yₜ₋₁, income_σ), min_income, max_income)
     # Find out what interval on the income grid yₜ lies in 
     if yₜ == min_income
-        return cdf(conditional_y_dist, min_income)
+        return cdf(y_dist, min_income)
     end
     end_index = searchsortedfirst(y_interval_points, yₜ)
     start_index = end_index -1
