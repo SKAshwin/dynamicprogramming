@@ -24,7 +24,9 @@ global const max_income = 1.5
 global const y_interval_points = range(min_income, stop=max_income, length=income_n_points+1)
 global const y_intervals = [(y_interval_points[i], y_interval_points[i + 1]) for i in 1:length(y_interval_points) - 1]
 global const y_grid = map(pair -> mean(Truncated(Normal(income_μ, income_σ), pair[1], pair[2])), y_intervals)
-global const y_dist = Truncated(Normal(income_μ, income_σ), min_income, max_income)
+
+# This constant does not do anything in a markov process
+# global const y_dist = Truncated(Normal(income_μ, income_σ), min_income, max_income)
 
 
 # What are the odds of drawing yₜ, conditional on yₜ₋₁ being observed? 
@@ -35,14 +37,14 @@ function conditional_pmf(yₜ, yₜ₋₁)
     # Now, yₜ = 0.5*μ + 0.5yₜ₋₁ + ϵ
     # Where ϵ ~ N(0, σ²)
     # But with the distribution truncated
-    # conditional_y_dist = 0.5*income_μ + Truncated(Normal(0.5*yₜ₋₁, income_σ), min_income, max_income)
+    conditional_y_dist = Truncated(Normal(0.5*income_μ + 0.5*yₜ₋₁, income_σ), min_income, max_income)
     # Find out what interval on the income grid yₜ lies in 
     if yₜ == min_income
-        return cdf(y_dist, min_income)
+        return cdf(conditional_y_dist, min_income)
     end
     end_index = searchsortedfirst(y_interval_points, yₜ)
     start_index = end_index -1
-    cdf(y_dist, y_interval_points[end_index]) - cdf(y_dist, y_interval_points[start_index])
+    cdf(conditional_y_dist, y_interval_points[end_index]) - cdf(conditional_y_dist, y_interval_points[start_index])
 end
 
 # Makes the interpolated expected value function, given the gridded expected value function
