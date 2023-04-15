@@ -9,18 +9,18 @@ using Optim: maximizer
 # Parameters
 global const T = 50                   # Number of periods
 global const r = 0.05                 # Interest rate
-global const n_grid = 500             # Number of grid points for the state (savings) space
+global const n_grid = 1000             # Number of grid points for the state (savings) space
 global const β = 1/(1+r)           # Discount factor
 global const min_consumption = 0.35    # Minimum consumption
 # Minimum consumption must be set to more than the distance between adjacent grid points in savings space
 # An assertion further below checks this - minimum consumption affects the max savings that can be in playing
 # And so affects the total range represented by the grid, and so affects the grid space
 
-global const income_μ = 0.75
+global const income_μ = 1
 global const income_σ = 0.1
-global const income_n_points = 10
+global const income_n_points = 30
 global const min_income = 0.5
-global const max_income = 1.0
+global const max_income = 1.5
 global const y_interval_points = range(min_income, stop=max_income, length=income_n_points+1)
 global const y_intervals = [(y_interval_points[i], y_interval_points[i + 1]) for i in 1:length(y_interval_points) - 1]
 global const y_grid = map(pair -> mean(Truncated(Normal(income_μ, income_σ), pair[1], pair[2])), y_intervals)
@@ -32,9 +32,13 @@ global const y_dist = Truncated(Normal(income_μ, income_σ), min_income, max_in
 # next
 # This function uses global constants, which don't need to be passed in, which has no performance issues
 function conditional_pmf(yₜ, yₜ₋₁)
+    # Now, yₜ = 0.5*μ + 0.5yₜ₋₁ + ϵ
+    # Where ϵ ~ N(0, σ²)
+    # But with the distribution truncated
+    # conditional_y_dist = 0.5*income_μ + Truncated(Normal(0.5*yₜ₋₁, income_σ), min_income, max_income)
     # Find out what interval on the income grid yₜ lies in 
-    if yₜ == 0.5
-        return cdf(y_dist, 0.5)
+    if yₜ == min_income
+        return cdf(conditional_y_dist, min_income)
     end
     end_index = searchsortedfirst(y_interval_points, yₜ)
     start_index = end_index -1
@@ -156,8 +160,7 @@ for t in T:-1:1
     #println("i_max in $t is $i_max corresponding to $(grid[i_max])")
     # Loop through each grid point for assets
     # Parallelize this section
-    # Threads.@threads 
-    for i in i_min:i_max
+    Threads.@threads for i in i_min:i_max
         aⁱ= grid[i]
         # Stores the grid for the value function in this period
         # Vᵢₜ[j] stores the value function, if you started period with assets aⁱ and drew income yʲ
