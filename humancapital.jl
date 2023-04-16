@@ -13,7 +13,7 @@ using Optim: maximizer
 # Parameters
 T = 20
 k₁= 100
-n_k_grid = 10000
+n_k_grid = 1000
 h_min = 0
 h_max = 60
 global const β = 0.9
@@ -86,7 +86,7 @@ function maximize_stage(Ṽₜ₊₁, kₜ, h_min, h_max)
 end
 
 for t in T:-1:1
-    Ṽₜ₊₁ = make_Ṽ(V, k_grid, t)
+    Ṽₜ₊₁ = make_Ṽ(V, k_grid, t+1)
     (stage_k_min, stage_k_max) = get_state_boundary(t, h_min, h_max, ϵ_min, ϵ_max, k₁)
     i_max = findfirst(kⁱ -> kⁱ >= stage_k_max, k_grid)
     i_min = findlast(kⁱ -> kⁱ <= stage_k_min, k_grid)
@@ -122,8 +122,8 @@ for t in 1:T
 end
 
 # Plotting
-plot(wages, label="Wages", legend=:bottomright, xlabel="Period", ylabel="Amount", title="Wages and Hours Worked Over Agent's Lifetime")
-plot!(wages, label = "Wages")
-plot!(hours[1:end-1], label="Savings")
+#plot(wages, label="Wages", legend=:bottomright, xlabel="Period", ylabel="Amount", title="Wages and Hours Worked Over Agent's Lifetime")
+#plot!(wages, label = "Wages")
+#plot!(hours[1:end-1], label="Savings")
 
 
