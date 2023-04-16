@@ -17,11 +17,11 @@ n_k_grid = 1000
 h_min = 0
 h_max = 60
 global const β = 0.9
-global const A = 0.1    # Constant multiplier to calibrate wage schedule
+global const A = 0.01   # Constant multiplier to calibrate wage schedule
 global const ρ = 0.6    # The elasticity of wages with respect to total accumulated human capital
-global const θ = 0.5    # The elasticity of wages with respect to total hours worked this period
+global const θ = 1.1    # The elasticity of wages with respect to total hours worked this period
 global const γ = 0.33
-global const ϕ = 0.01
+global const ϕ = 0.02
 
 # Every period, a shock changes the accumulated human capital by a proportion
 σ = 0.1
