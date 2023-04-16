@@ -5,7 +5,7 @@
 # More human capital increases wages
 # Later add option to work 0 hours
 
-using Interpolations, Optim, Distributions, Plots
+using Interpolations, Optim, Distributions, Plots, StatsBase
 using Optim: maximizer
 
 @show Threads.nthreads()
@@ -13,7 +13,7 @@ using Optim: maximizer
 # Parameters
 T = 20
 k₁= 100
-n_k_grid = 1000
+n_k_grid = 600
 h_min = 0
 h_max = 60
 global const β = 0.9
@@ -39,19 +39,6 @@ function get_state_boundary(t, h_min, h_max, ϵ_min, ϵ_max, k₁)
     k_max = ϵ_max^(t-1)*k₁ + h_max * sum([(ϵ_max^(τ)) for τ in 1:t-1])
     return (k_min, k_max)  
 end
-
-# Run a monte carlo simulation of outcomes in the state in stage T+1 if you play h_min every period
-#function mc_min()
-
-(grid_k_min, grid_k_max) = get_state_boundary(T+1, h_min, h_max, ϵ_min, ϵ_max, k₁) # Min/Max HC level at the start of period T+1
-(k_min, k_max) = get_state_boundary(T, h_min, h_max, ϵ_min, ϵ_max, k₁) # Min/Max HC level at the start of period T
-
-println("We have human capital space from $k_min to $k_max")
-
-V = zeros(T+1, n_k_grid) # V[t,i] is Vₜ(kⁱ) - the value function if you start period t with human capital of kⁱ
-policy = zeros(T+1, n_k_grid) # policy[t,i] is the optimal hours worked if at period t you have human capital kⁱ
-k_grid = collect(range(grid_k_min, stop=grid_k_max, length=n_k_grid-2)) # Grid of state variables (human capital)
-k_grid = sort(vcat(k_min, k_max, k_grid)) # make sure the actual stage T k_min, k_max are in the grid
 
 wage(kₜ,hₜ) = A * kₜ^ρ * hₜ^θ
 transition(kₜ, hₜ, ϵₜ) = (kₜ + hₜ)*ϵₜ
@@ -86,13 +73,49 @@ function maximize_stage(Ṽₜ₊₁, kₜ, h_min, h_max)
     maximize(f, h_min, h_max)
 end
 
-for t in T:-1:1
+# Run a monte carlo simulation of outcomes in the state in stage T+1 if you play h_min every period
+#function mc_min()
+
+(grid_k_min, grid_k_max) = get_state_boundary(T+1, h_min, h_max, ϵ_min, ϵ_max, k₁) # Min/Max HC level at the start of period T+1
+(k_min, k_max) = get_state_boundary(T, h_min, h_max, ϵ_min, ϵ_max, k₁) # Min/Max HC level at the start of period T
+
+println("We have human capital space from $k_min to $k_max")
+
+# Generate the adaptive grid in k-space via a series of monte carlo simulations
+
+# Runs a monte carlo simulation of N realizations of the state after T periods, assuming a uniform distribution from hours worked
+# Returns the (Tx1)xN matrix of human capital realizations, where the (t,n) entry is the amount of human capital in period t of the
+# nth monte carlo simulation
+function mc_hc(T, ϵ_grid, k₁, h_min, h_max, h_points, N)
+    # Each column of the matrix is a different simulation
+    shocks = rand(ϵ_grid, T, N)
+    hours_worked = rand(range(h_min, stop=h_max, length=h_points), T, N)
+    hc= zeros(T+1, N)
+    hc[1,:].= k₁
+    for t in 1:T
+        hc[t+1, :] = transition.(hc[t,:], hours_worked[t,:], shocks[t,:])
+    end
+    return hc
+end
+
+mc_k_sampled = vec(mc_hc(T, ϵ_grid, k₁, h_min, h_max, 60, 10000)[2:end, :])
+adaptive_grid = quantile(mc_k_sampled, range(0, stop=1, length=n_k_grid))[2:end-1]
+bottom_grid = range(grid_k_min, stop=minimum(adaptive_grid), length=50)
+top_grid = range(maximum(adaptive_grid), stop=grid_k_max, length=50)
+k_grid = sort(vcat(bottom_grid, adaptive_grid, top_grid, k_max, k_min))
+k_grid = unique(k_grid)
+n_k_grid = length(k_grid)
+
+V = zeros(T+1, n_k_grid) # V[t,i] is Vₜ(kⁱ) - the value function if you start period t with human capital of kⁱ
+policy = zeros(T+1, n_k_grid) # policy[t,i] is the optimal hours worked if at period t you have human capital kⁱ
+
+@time for t in T:-1:1
     Ṽₜ₊₁ = make_Ṽ(V, k_grid, t+1)
     (stage_k_min, stage_k_max) = get_state_boundary(t, h_min, h_max, ϵ_min, ϵ_max, k₁)
     i_max = findfirst(kⁱ -> kⁱ >= stage_k_max, k_grid)
     i_min = findlast(kⁱ -> kⁱ <= stage_k_min, k_grid)
-    println("In stage $t we have (i_min,i_max)=$((i_min, i_max)) corresponding to $((k_grid[i_min], k_grid[i_max])), with actual boundaries $((stage_k_min, stage_k_max))")
-    for i in i_min:i_max
+    #println("In stage $t we have (i_min,i_max)=$((i_min, i_max)) corresponding to $((k_grid[i_min], k_grid[i_max])), with actual boundaries $((stage_k_min, stage_k_max))")
+    Threads.@threads for i in i_min:i_max
         #if t==T && (i == i_min || i == i_max)
         #    continue
         #end
