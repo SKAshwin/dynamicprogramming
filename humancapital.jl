@@ -5,7 +5,7 @@
 # More human capital increases wages
 # Later add option to work 0 hours
 
-using Interpolations, Optim, Distributions
+using Interpolations, Optim, Distributions, Plots
 using Optim: maximizer
 
 @show Threads.nthreads()
@@ -21,7 +21,8 @@ global const A = 0.01   # Constant multiplier to calibrate wage schedule
 global const ρ = 0.6    # The elasticity of wages with respect to total accumulated human capital
 global const θ = 1.1    # The elasticity of wages with respect to total hours worked this period
 global const γ = 0.33
-global const ϕ = 0.02
+global const λ = -0.67
+global const ϕ = 0.17
 
 # Every period, a shock changes the accumulated human capital by a proportion
 σ = 0.1
@@ -55,7 +56,7 @@ k_grid = sort(vcat(k_min, k_max, k_grid)) # make sure the actual stage T k_min, 
 wage(kₜ,hₜ) = A * kₜ^ρ * hₜ^θ
 transition(kₜ, hₜ, ϵₜ) = (kₜ + hₜ)*ϵₜ
 pmf(ϵₜ) = 1/n_ϵ_grid # The odds of drawing any discrete shock is constant, because that's how we discretized/transformed it
-u(kₜ,hₜ) = log(wage(kₜ,hₜ)*hₜ) - ϕ * (hₜ^(1+γ))/(1+γ) # Stage game payoff - utility from wages times hours, disutility from hours worked
+u(kₜ,hₜ) = ((wage(kₜ,hₜ)*hₜ)^(1+λ))/(1+λ) - ϕ * (hₜ^(1+γ))/(1+γ) # Stage game payoff - utility from wages times hours, disutility from hours worked
 
 function make_Ṽ(V, k_grid, t)
     interpolate((k_grid,), V[t, :], Gridded(Linear()))
@@ -116,14 +117,14 @@ incomes = zeros(T)
 for t in 1:T
     cur_policy = interpolate((k_grid,), policy[t, :], Gridded(Linear()))
     hours[t] = cur_policy(hc[t])
-    wages[t] = wage(hours[t], hc[t])
-    hc[t+1] = transition(hc[t], hours[t], shocks[t])
+    wages[t] = wage(hc[t], hours[t])
+    hc[t+1] = transition(hc[t], hours[t], 1) # Simulate it with no shocks to HC for cleanest graph
     incomes[t] = hours[t]*wages[t]
 end
 
 # Plotting
-#plot(wages, label="Wages", legend=:bottomright, xlabel="Period", ylabel="Amount", title="Wages and Hours Worked Over Agent's Lifetime")
+plot(wages, label="Wages", legend=:bottomright, xlabel="Period", ylabel="Amount", title="Wages and Hours Worked Over Agent's Lifetime")
 #plot!(wages, label = "Wages")
-#plot!(hours[1:end-1], label="Savings")
+plot!(hours, label="Hours")
 
 
