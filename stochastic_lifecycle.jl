@@ -148,7 +148,7 @@ println("Minimum consumption is $min_consumption and distance between gridpoints
 @assert((max_aₜ-min_aₜ)/n_grid <= min_consumption)
 
 # Loop through each period backwards
-for t in T:-1:1
+@time for t in T:-1:1
     # Create the interpolated expected value function for the next period
     EṼ = make_EṼ(EV, grid, y_grid, t+1)
 
