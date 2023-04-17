@@ -145,12 +145,15 @@ function mc_hc(T, ϵ_grid, k₁, h_min, h_max, h_points, N)
     return hc
 end
 
+# Get the maximum and minimum possible human capital in period t
 function get_state_boundary(t, h_min, h_max, ϵ_min, ϵ_max, k₁)
     k_min = ϵ_min^(t-1)*k₁ + h_min * sum([(ϵ_max^(τ)) for τ in 1:t-1])
     k_max = ϵ_max^(t-1)*k₁ + h_max * sum([(ϵ_max^(τ)) for τ in 1:t-1])
     return (k_min, k_max)  
 end
 
+# Linearly interpolate the value function in period t
+# returns Ṽₜ(kₜ)
 function make_Ṽ(V, k_grid, t)
     interpolate((k_grid,), V[t, :], Gridded(Linear()))
 end
