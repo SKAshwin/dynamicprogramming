@@ -112,8 +112,11 @@ function solve(hcdp::HumanCapitalDP)
     return HumanCapitalDPSolution(V, policy, policy_func, V_func, wage_func, hcdp.T, hcdp.k₁, hcdp.ϵ_grid)
 end
 
+# Simulates the DP solution. If noise=true, the agent experiences the random shock to human capital every period
+# If noise=false, no shocks occur (although, note the agent behaves as-if shocks can happen every period - these shocks
+# merely always realize to 1, but the agent does not know this)
 function simulate(solution::HumanCapitalDPSolution, noise::Bool)
-    shocks = noise ? sample(solution.ϵ_grid, solution.T) : ones(solution.T)
+    shocks = noise ? rand(solution.ϵ_grid, solution.T) : ones(solution.T)
     hc = zeros(solution.T+1)
     hc[1] = solution.k₁
     hours = zeros(solution.T)
@@ -125,6 +128,26 @@ function simulate(solution::HumanCapitalDPSolution, noise::Bool)
         wages[t] = sol.wage_func(hc[t], hours[t])
         hc[t+1] = transition(hc[t], hours[t], shocks[t])
         incomes[t] = hours[t]*wages[t]
+    end
+
+    return (hours, wages, incomes, hc, shocks)
+end
+
+# Simulates N agents, returns tuple of matrices of hours, wages, incomes, human capital, and shocks
+# See above for what noise does
+function simulate(solution::HumanCapitalDPSolution, noise::Bool, N::Int)
+    shocks = noise ? rand(solution.ϵ_grid, solution.T, N) : ones(solution.T, N)
+    hc = zeros(solution.T+1,N)
+    hc[1, :] .= solution.k₁
+    hours = zeros(solution.T,N)
+    wages = zeros(solution.T, N)
+    incomes = zeros(solution.T, N)
+
+    for t in 1:solution.T
+        hours[t, :] = sol.policy_func.(t, hc[t, :])
+        wages[t, :] = sol.wage_func.(hc[t, :], hours[t, :])
+        hc[t+1, :] = transition.(hc[t, :], hours[t, :], shocks[t, :])
+        incomes[t, :] = hours[t, :].*wages[t, :]
     end
 
     return (hours, wages, incomes, hc, shocks)
