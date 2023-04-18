@@ -69,7 +69,7 @@ function HumanCapitalDP(T, k₁, β, A, ρ, θ, γ, λ, ϕ, σ)
     (grid_k_min, grid_k_max) = get_state_boundary(T+1, h_min, h_max, ϵ_min, ϵ_max, k₁) # Min/Max HC level at the start of period T+1
     (k_min, k_max) = get_state_boundary(T, h_min, h_max, ϵ_min, ϵ_max, k₁) # Min/Max HC level at the start of period T
 
-    println("We have human capital space from $k_min to $k_max")
+    # println("We have human capital space from $k_min to $k_max")
 
     # Generate the adaptive grid in k-space via a series of monte carlo simulations
     # The adaptive grid is supplemented by a top grid and a bottom grid
@@ -124,8 +124,8 @@ function simulate(solution::HumanCapitalDPSolution, noise::Bool)
     incomes = zeros(solution.T)
 
     for t in 1:solution.T
-        hours[t] = sol.policy_func(t, hc[t])
-        wages[t] = sol.wage_func(hc[t], hours[t])
+        hours[t] = solution.policy_func(t, hc[t])
+        wages[t] = solution.wage_func(hc[t], hours[t])
         hc[t+1] = transition(hc[t], hours[t], shocks[t])
         incomes[t] = hours[t]*wages[t]
     end
@@ -144,8 +144,8 @@ function simulate(solution::HumanCapitalDPSolution, noise::Bool, N::Int)
     incomes = zeros(solution.T, N)
 
     for t in 1:solution.T
-        hours[t, :] = sol.policy_func.(t, hc[t, :])
-        wages[t, :] = sol.wage_func.(hc[t, :], hours[t, :])
+        hours[t, :] = solution.policy_func.(t, hc[t, :])
+        wages[t, :] = solution.wage_func.(hc[t, :], hours[t, :])
         hc[t+1, :] = transition.(hc[t, :], hours[t, :], shocks[t, :])
         incomes[t, :] = hours[t, :].*wages[t, :]
     end
