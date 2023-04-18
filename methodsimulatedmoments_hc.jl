@@ -30,10 +30,39 @@ end
 # hcdp = HumanCapitalDP(16, 100, 0.9, 0.01, 0.6, 1.1, 0.33, -0.67, 0.15453838348388677, 0.1)
 # Best candidate found: [0.919399, 0.735726, 0.913193] for [β, ρ, θ] Fitness: 84.809515475
 # hcdp = HumanCapitalDP(16, 100, 0.919399, 0.01, 0.735726, 0.913193, 0.33, -0.67, 0.15453838348388677, 0.1)
+# Best candidate found: [0.011465] Fitness: 0.000014239
+# hcdp = HumanCapitalDP(16, 100, 0.919399, 0.011465, 0.735726, 0.913193, 0.33, -0.67, 0.15453838348388677, 0.1)
+# hcdp = HumanCapitalDP(16, 100, 0.660972, 0.362691, 0.27416, 0.623034, 0.192238, -0.575506, 0.325281, 0.347913)
 # function HumanCapitalDP(T, k₁, β, A, ρ, θ, γ, λ, ϕ, σ)
 
 file_path = "population_moments.csv"
 data_moments = CSV.read(file_path, DataFrame)
+
+function moment_score(sol::HumanCapitalDPSolution, data_moments, N)
+    model_moments = moments_by_period(sol, N)
+    model_med_wages = model_moments[!, "med_wage"]
+    data_med_wages = data_moments[!, "med_wage"]
+
+    model_med_hours = model_moments[!, "med_hours"]
+    data_med_hours = data_moments[!, "med_hours"]
+
+    model_mad_hours = model_moments[!, "mad_hours"]
+    data_mad_hours = data_moments[!, "mad_hours"]
+
+    model_mad_wages = model_moments[!, "mad_wage"]
+    data_mad_wages = data_moments[!, "mad_wage"]
+
+    return sum((model_med_wages .- data_med_wages).^2) + sum((model_med_hours .- data_med_hours).^2) +
+            sum((model_mad_wages .- data_mad_wages).^2) + sum((model_mad_hours .- data_mad_hours).^2)
+end
+
+function all_tuner(hcdp::HumanCapitalDP, data_moments, N)
+    function maximand(β, A, ρ, θ, γ, λ, ϕ, σ)
+        new_hcdp = HumanCapitalDP(hcdp.T, hcdp.k₁, β, A, ρ, θ, γ, λ, ϕ, σ)
+        sol = solve(new_hcdp)
+        moment_score(sol, data_moments, N)
+    end
+end
 
 function ϕ_moment_score(sol::HumanCapitalDPSolution, data_moments, N)
     start_hour_model = moments_by_period(sol, N)[1, "med_hours"]
