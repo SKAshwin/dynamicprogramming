@@ -69,7 +69,7 @@ function HumanCapitalDP(T, k₁, β, A, ρ, θ, γ, λ, ϕ, σ)
     (grid_k_min, grid_k_max) = get_state_boundary(T+1, h_min, h_max, ϵ_min, ϵ_max, k₁) # Min/Max HC level at the start of period T+1
     (k_min, k_max) = get_state_boundary(T, h_min, h_max, ϵ_min, ϵ_max, k₁) # Min/Max HC level at the start of period T
 
-    # println("We have human capital space from $k_min to $k_max")
+    #println("We have human capital space from $k_min to $k_max")
 
     # Generate the adaptive grid in k-space via a series of monte carlo simulations
     # The adaptive grid is supplemented by a top grid and a bottom grid
@@ -96,9 +96,14 @@ function solve(hcdp::HumanCapitalDP)
         (stage_k_min, stage_k_max) = get_state_boundary(t, hcdp.h_min, hcdp.h_max, hcdp.ϵ_min, hcdp.ϵ_max, hcdp.k₁)
         i_max = findfirst(kⁱ -> kⁱ >= stage_k_max, hcdp.k_grid)
         i_min = findlast(kⁱ -> kⁱ <= stage_k_min, hcdp.k_grid)
-        #println("In stage $t we have (i_min,i_max)=$((i_min, i_max)) corresponding to $((k_grid[i_min], k_grid[i_max])), with actual boundaries $((stage_k_min, stage_k_max))")
+        #println("In stage $t we have (i_min,i_max)=$((i_min, i_max)) corresponding to $((hcdp.k_grid[i_min], hcdp.k_grid[i_max])), with actual boundaries $((stage_k_min, stage_k_max))")
         Threads.@threads for i in i_min:i_max
             kⁱ = hcdp.k_grid[i]
+            if t==hcdp.T & (kⁱ < stage_k_min || kⁱ > stage_k_max)
+                # For t==T, there's no need to evaluate the slightly-out-of-range gridpoints
+                # If you do, there's a risk that no corresponding grid point exists in the grid to evaluate it in stage T+1
+                continue
+            end
             res = maximize_stage(hcdp, Ṽₜ₊₁, kⁱ)
             policy[t, i] = maximizer(res)
             V[t, i] = maximum(res)
@@ -170,7 +175,7 @@ end
 
 # Get the maximum and minimum possible human capital in period t
 function get_state_boundary(t, h_min, h_max, ϵ_min, ϵ_max, k₁)
-    k_min = ϵ_min^(t-1)*k₁ + h_min * sum([(ϵ_max^(τ)) for τ in 1:t-1])
+    k_min = ϵ_min^(t-1)*k₁ + h_min * sum([(ϵ_min^(τ)) for τ in 1:t-1])
     k_max = ϵ_max^(t-1)*k₁ + h_max * sum([(ϵ_max^(τ)) for τ in 1:t-1])
     return (k_min, k_max)  
 end
