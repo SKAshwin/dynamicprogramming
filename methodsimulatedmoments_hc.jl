@@ -1,8 +1,6 @@
 using Optim, DataFrames, CSV, BlackBoxOptim
 include("humancapital.jl")
 
-# NB: Code is out of date for new HCDP model
-
 # Returns the median, mean and variance of hours worked and wages by period
 # From monte carlo simulations
 # In a DataFrame
@@ -60,6 +58,8 @@ function moment_score(sol::HumanCapitalDPSolution, data_moments, N)
             sum((model_mad_wages .- data_mad_wages).^2) + sum((model_mad_hours .- data_mad_hours).^2)
 end
 
+
+#=
 function all_tuner(hcdp::HumanCapitalDP, data_moments, N)
     function maximand(β, A, ρ, θ, γ, λ, ϕ, σ)
         new_hcdp = HumanCapitalDP(hcdp.T, hcdp.k₁, β, A, ρ, θ, γ, λ, ϕ, σ)
@@ -115,3 +115,4 @@ function βρθ_tuner(hcdp::HumanCapitalDP, data_moments, N)
         wage_hour_age_schedule_score(sol, data_moments, N)
     end
 end
+=#
