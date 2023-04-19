@@ -3,6 +3,7 @@
 # Working more hours brings disutility, but increases wages in current period
 # and adds to human capital levels
 # More human capital increases wages
+# Add a random draw of the distaste to work parameter
 # Later add option to work 0 hours
 
 using Interpolations, Optim, Distributions, Plots, StatsBase
@@ -22,32 +23,34 @@ struct HumanCapitalDP
     θ
     γ
     λ
-    ϕ
-    σ
-    shock_dist
+    μ_ϕ
+    σ_ϕ
+    σ_ϵ
     ϵ_min
     ϵ_max
     h_min
     h_max
     grid_k_min
     grid_k_max
-    k_min
-    k_max
-    n_k_grid
+    n_k_grid::Int
     n_ϵ_grid::Int
+    n_ϕ_grid::Int
     k_grid
     ϵ_grid
+    ϕ_grid
 end
 
 struct HumanCapitalDPSolution
-    V
+    EV
     policy
     policy_func
-    V_func
+    EV_func
     wage_func
     T
     k₁
+    μ_ϕ
     ϵ_grid
+    ϕ_grid
 end
 
 # Creates a HumanCapitalDP object with the specified parameter values
@@ -55,21 +58,28 @@ end
 # Edit this function if you want to change the grid size
 # The grid in k is adaptive: it is more sparse the less likely a particular human capital value is likely to be reached
 # Determined using a monte carlo simulation assuming uniformly played hours
-function HumanCapitalDP(T, k₁, β, A, ρ, θ, γ, λ, ϕ, σ)
+function HumanCapitalDP(T, k₁, β, A, ρ, θ, γ, λ, μ_ϕ, σ_ϕ, σ_ϵ)
     n_k_adaptive_grid = 500 # The size the of the *adaptive* portion of the grid in k
     n_ϵ_grid = 20
+    n_ϕ_grid = 20
     h_min = 0 
     h_max = 60
-    shock_dist = LogNormal(0, σ)
+    shock_dist = LogNormal(0, σ_ϵ)
+    ϕ_dist = LogNormal(log(μ_ϕ), σ_ϕ) # μ_ϕ is the mean of the realized ϕ, so we pass its log here
 
     ϵ_grid = [quantile(shock_dist, i/(1+n_ϵ_grid)) for i in 1:n_ϵ_grid]
     ϵ_max = ϵ_grid[n_ϵ_grid]
     ϵ_min = ϵ_grid[1]
 
-    (grid_k_min, grid_k_max) = get_state_boundary(T+1, h_min, h_max, ϵ_min, ϵ_max, k₁) # Min/Max HC level at the start of period T+1
-    (k_min, k_max) = get_state_boundary(T, h_min, h_max, ϵ_min, ϵ_max, k₁) # Min/Max HC level at the start of period T
+    ϕ_grid = [quantile(ϕ_dist, i/(1+n_ϕ_grid)) for i in 1:n_ϕ_grid]
 
-    #println("We have human capital space from $k_min to $k_max")
+    (grid_k_min, grid_k_max) = get_state_boundary(T+1, h_min, h_max, ϵ_min, ϵ_max, k₁) # Min/Max HC level at the start of period T+1
+    boundary_points = collect(Iterators.flatten(get_state_boundary.(1:T, h_min, h_max, ϵ_min, ϵ_max, k₁))) 
+    # Every edge of the boundary
+    # in each period
+    # should be in the final grid
+
+    # println("We have human capital space from $k_min to $k_max")
 
     # Generate the adaptive grid in k-space via a series of monte carlo simulations
     # The adaptive grid is supplemented by a top grid and a bottom grid
@@ -80,48 +90,64 @@ function HumanCapitalDP(T, k₁, β, A, ρ, θ, γ, λ, ϕ, σ)
     adaptive_grid = quantile(mc_k_sampled, range(0, stop=1, length=n_k_adaptive_grid))[2:end-1]
     bottom_grid = range(grid_k_min, stop=minimum(adaptive_grid), length=50)
     top_grid = range(maximum(adaptive_grid), stop=grid_k_max, length=50)
-    k_grid = sort(vcat(bottom_grid, adaptive_grid, top_grid, k_max, k_min))
+    k_grid = sort(vcat(bottom_grid, adaptive_grid, top_grid, boundary_points))
     k_grid = unique(k_grid)
     n_k_grid = length(k_grid)
 
-    HumanCapitalDP(T, k₁, β, A, ρ, θ, γ, λ, ϕ, σ, shock_dist, ϵ_min, ϵ_max, h_min, h_max, grid_k_min, grid_k_max, 
-                            k_min, k_max, n_k_grid, n_ϵ_grid, k_grid, ϵ_grid)
+    HumanCapitalDP(T, k₁, β, A, ρ, θ, γ, λ, μ_ϕ, σ_ϕ, σ_ϵ, ϵ_min, ϵ_max, h_min, h_max, grid_k_min, grid_k_max, 
+                            n_k_grid, n_ϵ_grid, n_ϕ_grid, k_grid, ϵ_grid, ϕ_grid)
 end
 
 function solve(hcdp::HumanCapitalDP)
-    V = zeros(hcdp.T+1, hcdp.n_k_grid) # V[t,i] is Vₜ(kⁱ) - the value function if you start period t with human capital of kⁱ
-    policy = zeros(hcdp.T, hcdp.n_k_grid) # policy[t,i] is the optimal hours worked if at period t you have human capital kⁱ
+    EV = zeros(hcdp.T+1, hcdp.n_k_grid) # V[t,i] is E(Ṽₜ(kⁱ, ϕₜ)) - the expected value function if you start period t with human capital of kⁱ
+    # *Before* the realization of ϕₜ in that period
+    policy = zeros(hcdp.T, hcdp.n_k_grid, hcdp.n_ϕ_grid) # policy[t,i,j] is the optimal hours worked if at period t you have human capital kⁱ
+    # and you have ϕₜ = ϕʲ
     for t in hcdp.T:-1:1
-        Ṽₜ₊₁ = make_Ṽ(V, hcdp.k_grid, t+1)
+        EṼₜ₊₁ = make_EṼ(EV, hcdp.k_grid, t+1)
+        EV[t, :] = fill!(EV[t, :], -Inf) # Fill everything with -Inf, so out-of-scope points are labelled correctly
         (stage_k_min, stage_k_max) = get_state_boundary(t, hcdp.h_min, hcdp.h_max, hcdp.ϵ_min, hcdp.ϵ_max, hcdp.k₁)
         i_max = findfirst(kⁱ -> kⁱ >= stage_k_max, hcdp.k_grid)
         i_min = findlast(kⁱ -> kⁱ <= stage_k_min, hcdp.k_grid)
         #println("In stage $t we have (i_min,i_max)=$((i_min, i_max)) corresponding to $((hcdp.k_grid[i_min], hcdp.k_grid[i_max])), with actual boundaries $((stage_k_min, stage_k_max))")
         Threads.@threads for i in i_min:i_max
             kⁱ = hcdp.k_grid[i]
-            if t==hcdp.T & (kⁱ < stage_k_min || kⁱ > stage_k_max)
-                # For t==T, there's no need to evaluate the slightly-out-of-range gridpoints
-                # If you do, there's a risk that no corresponding grid point exists in the grid to evaluate it in stage T+1
-                continue
+            @assert(!(kⁱ < stage_k_min || kⁱ > stage_k_max), "$(kⁱ) is out of the stage bounds $((stage_k_min, stage_k_max))")
+            # Stores the grid for the value function in this period
+            # Vᵢₜ[j] stores the value function, if you started period with human capital kⁱ and drew distate ϕₜ = ϕʲ
+            # ie, Vₜ(kⁱ, ϕʲ)
+            Vᵢₜ = zeros(hcdp.n_ϕ_grid)
+            for j in 1:hcdp.n_ϕ_grid
+                ϕʲ = hcdp.ϕ_grid[j]
+                res = maximize_stage(hcdp, EṼₜ₊₁, kⁱ, ϕʲ)
+                policy[t, i, j] = maximizer(res)
+                Vᵢₜ[j] = maximum(res)
+                @assert(maximum(res) != -Inf, "Grid point ($i, $j) corresponding to (kⁱ,ϕʲ) = ($(kⁱ), $(ϕʲ)) in period $t has -Inf payoff")
             end
-            res = maximize_stage(hcdp, Ṽₜ₊₁, kⁱ)
-            policy[t, i] = maximizer(res)
-            V[t, i] = maximum(res)
+            
+            # Each realization of ϕʲ is equally likely by construction
+            # We want E(Vₜ(kⁱ, ϕₜ)) which is
+            # ∑Vₜ(kⁱ, ϕʲ)Pr(ϕₜ=ϕʲ)
+            # which is just the arithmetic mean of the Vₜ(kⁱ, ϕʲ)
+            EV[t, i] = mean(Vᵢₜ)
     
-            @assert(maximum(res) != -Inf, "Grid point $i corresponding to $(kⁱ) in period $t has -Inf payoff")
+            @assert(EV[t, i] != -Inf, "Grid point $i corresponding to $(kⁱ) in period $t has -Inf payoff")
         end
     end
-    policy_func = interpolate((1:hcdp.T,hcdp.k_grid), policy, (NoInterp(),Gridded(Linear())))
-    V_func = interpolate((1:hcdp.T+1,hcdp.k_grid), V, (NoInterp(),Gridded(Linear())))
+    # Interpolate over the continuous kₜ, but not the ϕₜ which are drawn from a discretized distribution
+    policy_func = interpolate((1:hcdp.T,hcdp.k_grid, hcdp.ϕ_grid), policy, (NoInterp(),Gridded(Linear()),Gridded(Constant())))
+    EV_func = interpolate((1:hcdp.T+1,hcdp.k_grid), EV, (NoInterp(),Gridded(Linear())))
     wage_func = (k, h) -> wage(hcdp, k, h)
-    return HumanCapitalDPSolution(V, policy, policy_func, V_func, wage_func, hcdp.T, hcdp.k₁, hcdp.ϵ_grid)
+    return HumanCapitalDPSolution(EV, policy, policy_func, EV_func, wage_func, hcdp.T, hcdp.k₁, hcdp.μ_ϕ, hcdp.ϵ_grid, hcdp.ϕ_grid)
 end
 
 # Simulates the DP solution. If noise=true, the agent experiences the random shock to human capital every period
-# If noise=false, no shocks occur (although, note the agent behaves as-if shocks can happen every period - these shocks
+# If ϵ_noise=false, no HC shocks occur (although, note the agent behaves as-if shocks can happen every period - these shocks
 # merely always realize to 1, but the agent does not know this)
-function simulate(solution::HumanCapitalDPSolution, noise::Bool)
-    shocks = noise ? rand(solution.ϵ_grid, solution.T) : ones(solution.T)
+# Similarly, if ϕ_noise = false, no work distaste shocks occur - it is always realized at the mean distaste
+function simulate(solution::HumanCapitalDPSolution, ϵ_noise::Bool, ϕ_noise::Bool)
+    ϵ_realizations = ϵ_noise ? rand(solution.ϵ_grid, solution.T) : ones(solution.T)
+    ϕ_realizations = ϕ_noise ? rand(solution.ϕ_grid, solution.T) : ones(solution.T) .* solution.μ_ϕ
     hc = zeros(solution.T+1)
     hc[1] = solution.k₁
     hours = zeros(solution.T)
@@ -129,19 +155,20 @@ function simulate(solution::HumanCapitalDPSolution, noise::Bool)
     incomes = zeros(solution.T)
 
     for t in 1:solution.T
-        hours[t] = solution.policy_func(t, hc[t])
+        hours[t] = solution.policy_func(t, hc[t], ϕ_realizations[t])
         wages[t] = solution.wage_func(hc[t], hours[t])
-        hc[t+1] = transition(hc[t], hours[t], shocks[t])
+        hc[t+1] = transition(hc[t], hours[t], ϵ_realizations[t])
         incomes[t] = hours[t]*wages[t]
     end
 
-    return (hours, wages, incomes, hc, shocks)
+    return (hours, wages, incomes, hc, ϵ_realizations, ϕ_realizations)
 end
 
 # Simulates N agents, returns tuple of matrices of hours, wages, incomes, human capital, and shocks
-# See above for what noise does
-function simulate(solution::HumanCapitalDPSolution, noise::Bool, N::Int)
-    shocks = noise ? rand(solution.ϵ_grid, solution.T, N) : ones(solution.T, N)
+# See above for what the noise arguments do
+function simulate(solution::HumanCapitalDPSolution, ϵ_noise::Bool, ϕ_noise::Bool, N::Int)
+    ϵ_realizations = ϵ_noise ? rand(solution.ϵ_grid, solution.T, N) : ones(solution.T, N)
+    ϕ_realizations = ϕ_noise ? rand(solution.ϕ_grid, solution.T, N) : ones(solution.T, N) .* solution.μ_ϕ
     hc = zeros(solution.T+1,N)
     hc[1, :] .= solution.k₁
     hours = zeros(solution.T,N)
@@ -149,13 +176,13 @@ function simulate(solution::HumanCapitalDPSolution, noise::Bool, N::Int)
     incomes = zeros(solution.T, N)
 
     for t in 1:solution.T
-        hours[t, :] = solution.policy_func.(t, hc[t, :])
+        hours[t, :] = solution.policy_func.(t, hc[t, :], ϕ_realizations[t, :])
         wages[t, :] = solution.wage_func.(hc[t, :], hours[t, :])
-        hc[t+1, :] = transition.(hc[t, :], hours[t, :], shocks[t, :])
+        hc[t+1, :] = transition.(hc[t, :], hours[t, :], ϵ_realizations[t, :])
         incomes[t, :] = hours[t, :].*wages[t, :]
     end
 
-    return (hours, wages, incomes, hc, shocks)
+    return (hours, wages, incomes, hc, ϵ_realizations, ϕ_realizations)
 end
 
 # Runs a monte carlo simulation of N realizations of the state after T periods, assuming a uniform distribution from hours worked
@@ -180,33 +207,35 @@ function get_state_boundary(t, h_min, h_max, ϵ_min, ϵ_max, k₁)
     return (k_min, k_max)  
 end
 
-# Linearly interpolate the value function in period t
-# returns Ṽₜ(kₜ)
-function make_Ṽ(V, k_grid, t)
-    interpolate((k_grid,), V[t, :], Gridded(Linear()))
+# Linearly interpolate the expected value function in period t
+# returns E(Ṽₜ₊₁(kₜ₊₁, ϕₜ₊₁)|kₜ₊₁) ie where kₜ₊₁ is known and a continuous value
+# EV[t, i] should have, for discrete kⁱ, E(Ṽₜ₊₁(kₜ₊₁, ϕₜ₊₁)|kₜ₊₁=kⁱ)
+function make_EṼ(EV, k_grid, t)
+    interpolate((k_grid, ), EV[t, :], Gridded(Linear()))
 end
 
-# Eₜ(Ṽₜ₊₁(hₜ₊₁)|hₜ, kₜ)
+# Eₜ(Ṽₜ₊₁(kₜ₊₁, ϕₜ₊₁)|hₜ, kₜ)
 # Expected interpolated value function in the next period given your current state and action
 # As the state transition is stochastic
-function Eₜ(hcdp::HumanCapitalDP, Ṽₜ₊₁, hₜ, kₜ)
+function Eₜ(hcdp::HumanCapitalDP, EṼₜ₊₁, hₜ, kₜ)
     # Check the interpolated value function for every possible realization of the noise
     # and as such every possible realization of hₜ given the current state and action
     # average the results
-    mean(map(ϵₜ -> Ṽₜ₊₁(transition(kₜ, hₜ, ϵₜ)), hcdp.ϵ_grid))
+    mean(map(ϵₜ -> EṼₜ₊₁(transition(kₜ, hₜ, ϵₜ)), hcdp.ϵ_grid))
 end
 
 # The maximand in every period - the stage utility plus the expected value function of the next period
-# given our actions this period and current state
-function maximand(hcdp::HumanCapitalDP, Ṽₜ₊₁, kₜ)
+# given our actions this period and current state, and the realization of the stochastic ϕₜ
+function maximand(hcdp::HumanCapitalDP, EṼₜ₊₁, kₜ, ϕₜ)
     function(hₜ)
-        u(hcdp, kₜ, hₜ) + hcdp.β*Eₜ(hcdp, Ṽₜ₊₁, hₜ, kₜ)
+        u(hcdp, kₜ, hₜ, ϕₜ) + hcdp.β*Eₜ(hcdp, EṼₜ₊₁, hₜ, kₜ)
     end
 end
 
 # Maximizes the stage game of the DP problem
-function maximize_stage(hcdp::HumanCapitalDP,Ṽₜ₊₁, kₜ)
-    f = maximand(hcdp, Ṽₜ₊₁, kₜ)
+# Given the current state and the realization of the stochastic ϕₜ
+function maximize_stage(hcdp::HumanCapitalDP, EṼₜ₊₁, kₜ, ϕₜ)
+    f = maximand(hcdp, EṼₜ₊₁, kₜ, ϕₜ)
     maximize(f, hcdp.h_min, hcdp.h_max)
 end
 
@@ -214,7 +243,8 @@ wage(hcdp::HumanCapitalDP, kₜ,hₜ) = hcdp.A * kₜ^hcdp.ρ * hₜ^hcdp.θ
 transition(kₜ, hₜ, ϵₜ) = (kₜ + hₜ)*ϵₜ
 # Stage game payoff - utility from wages times hours, disutility from hours worked
 # Utility and disutility are CRRA
-u(hcdp::HumanCapitalDP,kₜ,hₜ) = crra(wage(hcdp, kₜ,hₜ)*hₜ, 1+hcdp.λ) - hcdp.ϕ * crra(hₜ, 1+hcdp.γ) 
+# Need to give the realization of the stochastic ϕₜ
+u(hcdp::HumanCapitalDP,kₜ,hₜ,ϕₜ) = crra(wage(hcdp, kₜ,hₜ)*hₜ, 1+hcdp.λ) - ϕₜ * crra(hₜ, 1+hcdp.γ) 
 crra(value, param) = (value^param)/param
 
 # Common test values
