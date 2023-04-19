@@ -1,11 +1,13 @@
 using Optim, DataFrames, CSV, BlackBoxOptim
 include("humancapital.jl")
 
+# NB: Code is out of date for new HCDP model
+
 # Returns the median, mean and variance of hours worked and wages by period
 # From monte carlo simulations
 # In a DataFrame
 function moments_by_period(sol::HumanCapitalDPSolution, N::Int)
-    (hours, wages, _, _, _) = simulate(sol, true, N)
+    (hours, wages, _, _, _) = simulate(sol, true, true, N)
     mean_hours = vec(mapslices(mean, hours, dims=2))
     med_hours = vec(mapslices(median, hours, dims=2))
     mad_hours = vec(mapslices(mad_slice, hours, dims=2))
@@ -26,6 +28,8 @@ function mad_slice(x)
     med = median(x)
     return median(abs.(x .- med))
 end
+
+# OLD MODEL iterations
 # hcdp = HumanCapitalDP(16, 100, 0.9, 0.01, 0.6, 1.1, 0.33, -0.67, 0.17, 0.1)
 # hcdp = HumanCapitalDP(16, 100, 0.9, 0.01, 0.6, 1.1, 0.33, -0.67, 0.15453838348388677, 0.1)
 # Best candidate found: [0.919399, 0.735726, 0.913193] for [β, ρ, θ] Fitness: 84.809515475
