@@ -59,9 +59,9 @@ end
 # The grid in k is adaptive: it is more sparse the less likely a particular human capital value is likely to be reached
 # Determined using a monte carlo simulation assuming uniformly played hours
 function HumanCapitalDP(T, k₁, β, A, ρ, θ, γ, λ, μ_ϕ, σ_ϕ, σ_ϵ)
-    n_k_adaptive_grid = 500 # The size the of the *adaptive* portion of the grid in k
+    n_k_adaptive_grid = 100 # The size the of the *adaptive* portion of the grid in k
     n_ϵ_grid = 20
-    n_ϕ_grid = 20
+    n_ϕ_grid = 10
     h_min = 0 
     h_max = 60
     shock_dist = LogNormal(0, σ_ϵ)
@@ -88,8 +88,8 @@ function HumanCapitalDP(T, k₁, β, A, ρ, θ, γ, λ, μ_ϕ, σ_ϕ, σ_ϵ)
     # These points are just equally spaced
     mc_k_sampled = vec(mc_hc(T, ϵ_grid, k₁, h_min, h_max, 60, 10000)[2:end, :])
     adaptive_grid = quantile(mc_k_sampled, range(0, stop=1, length=n_k_adaptive_grid))[2:end-1]
-    bottom_grid = range(grid_k_min, stop=minimum(adaptive_grid), length=50)
-    top_grid = range(maximum(adaptive_grid), stop=grid_k_max, length=50)
+    bottom_grid = range(grid_k_min, stop=minimum(adaptive_grid), length=25)
+    top_grid = range(maximum(adaptive_grid), stop=grid_k_max, length=25)
     k_grid = sort(vcat(bottom_grid, adaptive_grid, top_grid, boundary_points))
     k_grid = unique(k_grid)
     n_k_grid = length(k_grid)
