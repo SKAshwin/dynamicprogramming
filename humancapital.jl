@@ -3,7 +3,10 @@
 # Working more hours brings disutility, but increases wages in current period
 # and adds to human capital levels
 # More human capital increases wages
-# Add a random draw of the distaste to work parameter
+# Distate to work changes randomly every period
+# Change distate to work to ϕᵢ + ωᵢₜ for each agent; so agents have different systematic tastes to work
+# Actually we already have that - just make a mixture
+# That get shocked every period
 # Later add option to work 0 hours
 
 using Interpolations, Optim, Distributions, Plots, StatsBase
