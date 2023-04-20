@@ -102,13 +102,15 @@ function HumanCapitalDP(T, k₁, β, A, ρ, θ, γ, λ, μ_ϕ, σ_ϕ, σ_ϵ)
 end
 
 function solve(hcdp::HumanCapitalDP)
-    EV = zeros(hcdp.T+1, hcdp.n_k_grid) # V[t,i] is E(Ṽₜ(kⁱ, ϕₜ)) - the expected value function if you start period t with human capital of kⁱ
+    EV = fill(-Inf, hcdp.T+1, hcdp.n_k_grid)
+    # V[t,i] is E(Ṽₜ(kⁱ, ϕₜ)) - the expected value function if you start period t with human capital of kⁱ
     # *Before* the realization of ϕₜ in that period
+    # Fill everything with -Inf, so out-of-scope points are labelled correctly
+    EV[hcdp.T+1, :] = zeros(hcdp.n_k_grid) # Period T+1 is full of 0s, though
     policy = zeros(hcdp.T, hcdp.n_k_grid, hcdp.n_ϕ_grid) # policy[t,i,j] is the optimal hours worked if at period t you have human capital kⁱ
     # and you have ϕₜ = ϕʲ
     for t in hcdp.T:-1:1
         EṼₜ₊₁ = make_EṼ(EV, hcdp.k_grid, t+1)
-        EV[t, :] = fill!(EV[t, :], -Inf) # Fill everything with -Inf, so out-of-scope points are labelled correctly
         (stage_k_min, stage_k_max) = get_state_boundary(t, hcdp.h_min, hcdp.h_max, hcdp.ϵ_min, hcdp.ϵ_max, hcdp.k₁)
         i_max = findfirst(kⁱ -> kⁱ >= stage_k_max, hcdp.k_grid)
         i_min = findlast(kⁱ -> kⁱ <= stage_k_min, hcdp.k_grid)
