@@ -2,11 +2,13 @@
 # ie different parameters, randomly drawn
 # Solve all of them 
 # Observe moments on the results
-# For now, allow for individual-specific distate in work to be drawn from a log-normal distribution
+# Allow for individual-specific distate in work to be drawn from a log-normal distribution
 # To be precise, ϕᵢₜ = ϕᵢωᵢₜ, where ϕᵢ ~ logNormal(ln(μ_ϕ), σ_ϕ)
 # and ωᵢₜ = logNormal(0, σ_ω) 
 # WARNING: This μ_ϕ is different from the μ_ϕ in HumanCapitalDP. μ_ϕ here is the *population* mean
 # of ϕ, whereas in HumanCapitalDP it is the individual mean of ϕ. 
+# Also allow A, the overall productivity agents are endowed with, for a given level of human capital and hours worked
+# to vary by person, be drawn from a log-normal distribution
 
 using Distributions
 include("humancapital.jl")
@@ -19,7 +21,8 @@ struct HumanCapitalDPMixture
     N::Int
     k₁
     β
-    A
+    μ_A
+    σ_A
     ρ
     θ
     γ
@@ -33,21 +36,29 @@ end
 struct HumanCapitalDPMixtureSolution
     T::Int
     N::Int
+    A_realizations
+    ϕ_realizations
     solutions::Vector{HumanCapitalDPSolution}
 end
 
 function solve(mixture::HumanCapitalDPMixture)
-    ϕ_dist = LogNormal(log(mixture.μ_ϕ), mixture.σ_ω)
+    ϕ_dist = LogNormal(log(mixture.μ_ϕ), mixture.σ_ω) # TODO: Remember to fix this
     ϕ_realizations = rand(ϕ_dist, mixture.N)
+    A_dist = LogNormal(log(mixture.μ_A), mixture.σ_A)
+    A_realizations = rand(A_dist, mixture.N)
     sols = Vector{HumanCapitalDPSolution}(undef, mixture.N)
     Threads.@threads for i in 1:mixture.N
-        hcdp = HumanCapitalDP(mixture.T, mixture.k₁, mixture.β, mixture.A, mixture.ρ, mixture.θ, mixture.γ, mixture.λ, ϕ_realizations[i], mixture.σ_ω, mixture.σ_ϵ)
+        hcdp = HumanCapitalDP(mixture.T, mixture.k₁, mixture.β, A_realizations[i], mixture.ρ, mixture.θ, mixture.γ, mixture.λ, ϕ_realizations[i], mixture.σ_ω, mixture.σ_ϵ)
         sols[i] = solve(hcdp)
     end
-    HumanCapitalDPMixtureSolution(mixture.T, mixture.N, sols)
+    HumanCapitalDPMixtureSolution(mixture.T, mixture.N, A_realizations, ϕ_realizations,sols)
 end
-# mix = HumanCapitalDPMixture(16, 50, 100, 0.9, 0.01, 0.6, 1.1, 0.33, -0.67, 0.15, 0.1, 0.1, 0.1)
+# mix = HumanCapitalDPMixture(16, 50, 100, 0.9, 0.01, 0.1, 0.6, 1.1, 0.33, -0.67, 0.15, 0.1, 0.1, 0.1)
 
+# Simulates the mixture of agents in the solved HumanCapitalDPMixture
+# The each have a (realized) stochastic mean ϕ, distaste for work.
+# ϕ_noise controls whether you want this disaste for work to vary across time, within each agent
+# ϵ_noise controls whether you want shocks to the total amount of human capital every period
 function simulate(mix_solution::HumanCapitalDPMixtureSolution, ϵ_noise::Bool, ϕ_noise::Bool)
     solutions = mix_solution.solutions
     ϵ_realizations = ones(mix_solution.T, mix_solution.N)
