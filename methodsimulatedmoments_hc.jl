@@ -1,5 +1,6 @@
 using Optim, DataFrames, CSV, BlackBoxOptim
 include("humancapital.jl")
+include("humancapitalDPmixture.jl")
 
 # Returns the median, mean and variance of hours worked and wages by period
 # From monte carlo simulations
@@ -17,6 +18,22 @@ function moments_by_period(sol::HumanCapitalDPSolution, N::Int)
     return DataFrame(mean_hours = mean_hours, med_hours = med_hours, mad_hours = mad_hours,
                         mean_wage = mean_wages, med_wage = med_wages, mad_wage = mad_wages)
 end
+
+# Given a mixture solution, calculates moments by period
+function moments_by_period(mixsol::HumanCapitalDPMixtureSolution)
+    (hours, wages, _, _, _) = simulate(mixsol, true, true)
+    mean_hours = vec(mapslices(mean, hours, dims=2))
+    med_hours = vec(mapslices(median, hours, dims=2))
+    mad_hours = vec(mapslices(mad_slice, hours, dims=2))
+    
+    mean_wages = vec(mapslices(mean, wages, dims=2))
+    med_wages = vec(mapslices(median, wages, dims=2))
+    mad_wages = vec(mapslices(mad_slice, wages, dims=2))
+
+    return DataFrame(mean_hours = mean_hours, med_hours = med_hours, mad_hours = mad_hours,
+                        mean_wage = mean_wages, med_wage = med_wages, mad_wage = mad_wages)
+end
+
 
 # Given an arbitrary vector/collection, calculates the median absolute deviation of that vector
 # IE, for each entry, calculate its absolute deviation from the median of the collections
