@@ -66,7 +66,7 @@ function HumanCapitalDP(T, k₁, β, A, ρ, θ, γ, λ, μ_ϕ, σ_ϕ, σ_ϵ)
     n_ϵ_grid = 20
     n_ϕ_grid = 10
     h_min = 0 
-    h_max = 60
+    h_max = 120
     shock_dist = LogNormal(0, σ_ϵ)
     ϕ_dist = LogNormal(log(μ_ϕ), σ_ϕ) # μ_ϕ is the mean of the realized ϕ, so we pass its log here
 

@@ -46,7 +46,6 @@ function solve(mixture::HumanCapitalDPMixture)
     end
     HumanCapitalDPMixtureSolution(mixture.T, mixture.N, sols)
 end
-maximize_stage
 # mix = HumanCapitalDPMixture(16, 50, 100, 0.9, 0.01, 0.6, 1.1, 0.33, -0.67, 0.15, 0.1, 0.1, 0.1)
 
 function simulate(mix_solution::HumanCapitalDPMixtureSolution, ϵ_noise::Bool, ϕ_noise::Bool)
