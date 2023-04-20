@@ -1,5 +1,4 @@
 using Optim, DataFrames, CSV, BlackBoxOptim
-#include("humancapital.jl")
 include("humancapitalDPmixture.jl")
 
 # Returns the median, mean and variance of hours worked and wages by period

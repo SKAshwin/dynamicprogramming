@@ -10,6 +10,9 @@
 # Also allow A, the overall productivity agents are endowed with, for a given level of human capital and hours worked
 # to vary by person, be drawn from a log-normal distribution
 
+# For testing, this is close to the real thing
+# mix = HumanCapitalDPMixture(16, 50, 100, 0.9, 0.01, 0.3, 0.6, 1.1, 0.33, -0.67, 0.15, 0.1, 0.1, 0.01)
+
 using Distributions
 include("humancapital.jl")
 
@@ -53,7 +56,6 @@ function solve(mixture::HumanCapitalDPMixture)
     end
     HumanCapitalDPMixtureSolution(mixture.T, mixture.N, A_realizations, ϕ_realizations,sols)
 end
-# mix = HumanCapitalDPMixture(16, 50, 100, 0.9, 0.01, 0.1, 0.6, 1.1, 0.33, -0.67, 0.15, 0.1, 0.1, 0.1)
 
 # Simulates the mixture of agents in the solved HumanCapitalDPMixture
 # The each have a (realized) stochastic mean ϕ, distaste for work.
